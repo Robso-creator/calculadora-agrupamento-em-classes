@@ -1,0 +1,7 @@
+# Arquivo de configuração para implantação no Streamlit Community Cloud
+[theme]
+primaryColor = "#4287f5"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f0f2f6"
+textColor = "#262730"
+font = "sans serif"

@@ -79,7 +79,7 @@ pip install -r requirements.txt
 ### 6️⃣ Rode o projeto
 
 ```bash
-streamlit run src/app.py
+streamlit run src/main.py
 ```
 
 O navegador abrirá automaticamente com o projeto rodando.
@@ -94,9 +94,9 @@ Se quiser parar o projeto, volte ao terminal e pressione `Ctrl + C`.
 
 # Features
 
-![Overview da calculadora](src/assets/overview.png)
+![Overview da calculadora](assets/overview.png)
 
 # Resultados
-![Resultados das contas](src/assets/resultados.png)
+![Resultados das contas](assets/resultados.png)
 
-![Detalhamento dos cálculos realizados](src/assets/detalhamento_calculo.png)
+![Detalhamento dos cálculos realizados](assets/detalhamento_calculo.png)

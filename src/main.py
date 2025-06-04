@@ -4,11 +4,35 @@ import numpy as np
 import matplotlib.pyplot as plt
 import re
 
-st.set_page_config(page_title="Calculadora Estatística", layout="wide")
+st.set_page_config(
+    page_title="Calculadora Estatística",
+    layout="wide",
+    menu_items={
+        'About': "# Calculadora de Estatística para Dados Agrupados\n"
+                 "Esta aplicação permite calcular estatísticas descritivas para dados agrupados em classes."
+    }
+)
 
 
 def main():
     st.title("Calculadora de Estatística para Dados Agrupados")
+
+    # Adicionar informações sobre a aplicação
+    with st.expander("Sobre esta aplicação", expanded=False):
+        st.markdown("""
+        ### Sobre
+        Esta aplicação permite calcular estatísticas descritivas para dados agrupados em classes, incluindo:
+        - Média
+        - Mediana
+        - Moda bruta (incluindo múltiplas modas)
+        - Moda de Czuber (incluindo múltiplas modas)
+        - Variância
+        - Desvio padrão
+        - Coeficiente de variação
+
+        ### Desenvolvido por
+        Aplicação desenvolvida com Streamlit, Pandas, NumPy e Matplotlib.
+        """)
 
     st.markdown("""
     Esta aplicação permite calcular estatísticas descritivas para dados agrupados em classes.
@@ -22,7 +46,7 @@ def main():
     3. A aplicação calculará automaticamente os valores faltantes e as estatísticas
     """)
 
-    # Configuração inicial da tabela com exemplo multimodal
+    # Inicializar dados na sessão apenas uma vez
     if 'data' not in st.session_state:
         st.session_state.data = pd.DataFrame({
             'Classe': ['15-19', '19-23', '23-27', '27-31', '31-35'],
@@ -30,26 +54,37 @@ def main():
             'faq': ['', '', '', '', '']
         })
 
+    # Inicializar flag para controlar atualizações
+    if 'form_submitted' not in st.session_state:
+        st.session_state.form_submitted = False
+
     # Interface para edição da tabela
     with st.expander("Tabela de Dados", expanded=True):
         col1, col2 = st.columns([3, 1])
 
         with col1:
-            # Editor de tabela
-            edited_data = st.data_editor(
-                st.session_state.data,
-                num_rows="dynamic",
-                key="data_editor",
-                column_config={
-                    "Classe": st.column_config.TextColumn("Classe (ex: 8-10)"),
-                    "fi": st.column_config.TextColumn("Frequência (fi)"),
-                    "faq": st.column_config.TextColumn("Freq. Acumulada (faq)")
-                },
-                hide_index=True
-            )
+            # Usar formulário para evitar atualizações automáticas
+            with st.form(key="data_form"):
+                # Editor de tabela
+                edited_data = st.data_editor(
+                    st.session_state.data,
+                    num_rows="dynamic",
+                    key="data_editor",
+                    column_config={
+                        "Classe": st.column_config.TextColumn("Classe (ex: 8-10)"),
+                        "fi": st.column_config.TextColumn("Frequência (fi)"),
+                        "faq": st.column_config.TextColumn("Freq. Acumulada (faq)")
+                    },
+                    hide_index=True,
+                    disabled=False
+                )
 
-            # Atualizar dados na sessão
-            st.session_state.data = edited_data
+                # Botão de submissão do formulário
+                submit_button = st.form_submit_button(label="Atualizar Dados")
+
+                if submit_button:
+                    st.session_state.data = edited_data
+                    st.session_state.form_submitted = True
 
         with col2:
             st.markdown("### Exemplo de entrada (Multimodal):")
@@ -63,28 +98,24 @@ def main():
             | 31-35  | 10 | 52 |
             """)
 
-            st.markdown("Você pode deixar campos vazios e a aplicação tentará calcular os valores faltantes.")
-
     # Botão para processar os dados
-    if st.button("Calcular Estatísticas"):
+    if st.button("Calcular Estatísticas", type="primary"):
         # Verificar se há dados suficientes
-        if len(edited_data) < 2 or not any(edited_data['Classe'].astype(str).str.strip() != ''):
+        if len(st.session_state.data) < 2 or not any(st.session_state.data['Classe'].astype(str).str.strip() != ''):
             st.error("Por favor, insira pelo menos duas classes com valores.")
             return
 
         # Processar os dados
         try:
-            processed_data = process_data(edited_data)
+            processed_data = process_data(st.session_state.data)
 
             # Exibir tabela processada
             st.subheader("Tabela de Frequências Completa")
-            st.dataframe(processed_data)
+            st.dataframe(processed_data, use_container_width=True)
 
             # Calcular e exibir estatísticas
             display_statistics(processed_data)
 
-            # Exibir gráficos
-            # display_charts(processed_data)
 
         except Exception as e:
             st.error(f"Erro ao processar os dados: {str(e)}")
@@ -160,8 +191,11 @@ def process_data(data):
     # Calcular fi.xi
     df['fi_xi'] = df['fi'] * df['xi']
 
-    # Calcular frequência relativa
-    total_fi = df['fi'].sum()
+    # Arredondar todas as colunas numéricas para duas casas decimais
+    numeric_cols = ['limite_inferior', 'limite_superior', 'amplitude', 'xi', 'fi_xi']
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = df[col].round(2)
 
     return df
 
@@ -241,10 +275,10 @@ def display_statistics(df):
     total_fi = df['fi'].sum()
 
     # Média
-    media = df['fi_xi'].sum() / total_fi
+    media = round((df['fi_xi'].sum() / total_fi), 2)
 
     # Mediana
-    mediana = calculate_median(df)
+    mediana = round(calculate_median(df), 2)
 
     # Moda bruta
     modas_brutas = calculate_raw_mode(df)
@@ -254,55 +288,56 @@ def display_statistics(df):
 
     # Variância e desvio padrão
     df['fi_xi_menos_media_quadrado'] = df['fi'] * ((df['xi'] - media) ** 2)
-    variancia = df['fi_xi_menos_media_quadrado'].sum() / total_fi
-    desvio_padrao = np.sqrt(variancia)
+    variancia = round((df['fi_xi_menos_media_quadrado'].sum() / total_fi), 2)
+    desvio_padrao = round(np.sqrt(variancia), 2)
 
     # Coeficiente de variação
-    coef_variacao = (desvio_padrao / media) * 100 if media != 0 else np.nan
+    coef_variacao = round((desvio_padrao / media) * 100, 2) if media != 0 else np.nan
 
     # Exibir resultados
     with col1:
-        st.metric("Média", f"{media:.4f}")
-        st.metric("Mediana", f"{mediana:.4f}")
+        st.metric("Média", f"{media:.2f}")
+        st.metric("Mediana", f"{mediana:.2f}")
 
         # Exibir modas
         if isinstance(modas_brutas, list):
             st.markdown("**Modas Brutas:**")
             for moda in modas_brutas:
-                st.markdown(f"- {moda:.4f}")
+                st.markdown(f"- {moda:.2f}")
         elif pd.isna(modas_brutas):
             st.markdown("**Moda Bruta:** Amodal")
         else:
-            st.metric("Moda Bruta", f"{modas_brutas:.4f}")
+            st.metric("Moda Bruta", f"{modas_brutas:.2f}")
 
         if isinstance(modas_czuber, list):
             st.markdown("**Modas de Czuber:**")
             for moda in modas_czuber:
-                st.markdown(f"- {moda:.4f}")
+                st.markdown(f"- {moda:.2f}")
         elif pd.isna(modas_czuber):
             st.markdown("**Moda de Czuber:** Amodal")
         else:
-            st.metric("Moda de Czuber", f"{modas_czuber:.4f}")
+            st.metric("Moda de Czuber", f"{modas_czuber:.2f}")
 
     with col2:
-        st.metric("Variância", f"{variancia:.4f}")
-        st.metric("Desvio Padrão", f"{desvio_padrao:.4f}")
+        st.metric("Variância", f"{variancia:.2f}")
+        st.metric("Desvio Padrão", f"{desvio_padrao:.2f}")
         st.metric("Coeficiente de Variação", f"{coef_variacao:.2f}%" if not pd.isna(coef_variacao) else "Indefinido")
 
     # Tabela com cálculos intermediários
     with st.expander("Ver cálculos detalhados"):
-        st.dataframe(df[['Classe', 'xi', 'fi', 'faq', 'fi_xi']])
+        st.dataframe(df[['Classe', 'xi', 'fi', 'faq', 'fi_xi']],
+                     use_container_width=True)
 
         st.markdown(f"""
         ### Fórmulas utilizadas:
 
-        - **Média**: $\\bar{{x}} = \\frac{{\\sum{{f_i \\cdot x_i}}}}{{\\sum{{f_i}}}} = \\frac{{{df['fi_xi'].sum():.4f}}}{{{total_fi}}} = {media:.4f}$
+        - **Média**: $\\bar{{x}} = \\frac{{\\sum{{f_i \\cdot x_i}}}}{{\\sum{{f_i}}}} = \\frac{{{df['fi_xi'].sum():.2f}}}{{{total_fi}}} = {media:.2f}$
 
-        - **Variância**: $s^2 = \\frac{{\\sum{{f_i \\cdot (x_i - \\bar{{x}})^2}}}}{{\\sum{{f_i}}}} = \\frac{{{df['fi_xi_menos_media_quadrado'].sum():.4f}}}{{{total_fi}}} = {variancia:.4f}$
+        - **Variância**: $s^2 = \\frac{{\\sum{{f_i \\cdot (x_i - \\bar{{x}})^2}}}}{{\\sum{{f_i}}}} = \\frac{{{df['fi_xi_menos_media_quadrado'].sum():.2f}}}{{{total_fi}}} = {variancia:.2f}$
 
-        - **Desvio Padrão**: $s = \\sqrt{{s^2}} = \\sqrt{{{variancia:.4f}}} = {desvio_padrao:.4f}$
+        - **Desvio Padrão**: $s = \\sqrt{{s^2}} = \\sqrt{{{variancia:.2f}}} = {desvio_padrao:.2f}$
 
-        - **Coeficiente de Variação**: $CV = \\frac{{s}}{{\\bar{{x}}}} \\cdot 100\\% = \\frac{{{desvio_padrao:.4f}}}{{{media:.4f}}} \\cdot 100\\% = {coef_variacao:.2f}\\%$
+        - **Coeficiente de Variação**: $CV = \\frac{{s}}{{\\bar{{x}}}} \\cdot 100\\% = \\frac{{{desvio_padrao:.2f}}}{{{media:.2f}}} \\cdot 100\\% = {coef_variacao:.2f}\\%$
         """)
 
 
@@ -320,7 +355,6 @@ def calculate_median(df):
             classe_mediana = row
             faq_anterior = df.loc[i - 1, 'faq'] if i > 0 else 0  # Corrigir faq_anterior
             break
-        # faq_anterior = row['faq'] # Movido para dentro do if
 
     if classe_mediana is None:
         return np.nan
@@ -353,19 +387,29 @@ def calculate_raw_mode(df):
     modas_brutas = []
     for _, row in classes_modais.iterrows():
         moda = (row['limite_inferior'] + row['limite_superior']) / 2
+        # Arredondar para duas casas decimais
+        moda = round(moda, 2)
         modas_brutas.append(moda)
 
     return modas_brutas if len(modas_brutas) > 1 else modas_brutas[0]
 
 
 def calculate_czuber_mode(df):
-    """Calcula a(s) moda(s) de Czuber."""
+    """
+    Calcula a(s) moda(s) de Czuber usando a fórmula correta.
+    Fórmula: Mo = Li + [(d1)/(d1+d2)] * h
+    Onde:
+    - Li = limite inferior da classe modal
+    - d1 = diferença entre a frequência da classe modal e da classe anterior
+    - d2 = diferença entre a frequência da classe modal e da classe posterior
+    - h = amplitude da classe
+    """
     max_fi = df['fi'].max()
 
     # Caso amodal
     if (df['fi'] == max_fi).all():
         st.info("Distribuição amodal. Usando o ponto médio da distribuição para a moda de Czuber.")
-        return df['xi'].mean()
+        return round(df['xi'].mean(), 2)
 
     # Encontrar todas as classes com a frequência máxima
     indices_modais = df.index[df['fi'] == max_fi].tolist()
@@ -373,106 +417,50 @@ def calculate_czuber_mode(df):
     modas_czuber = []
 
     for idx_max in indices_modais:
-        # Se for a primeira ou última classe, usar a moda bruta
-        if idx_max == 0 or idx_max == len(df) - 1:
-            st.info(
-                f"Classe modal '{df.loc[idx_max, 'Classe']}' é a primeira ou última. Usando a moda bruta ({((df.loc[idx_max, 'limite_inferior'] + df.loc[idx_max, 'limite_superior']) / 2):.4f}) para a moda de Czuber.")
-            moda_czuber = (df.loc[idx_max, 'limite_inferior'] + df.loc[idx_max, 'limite_superior']) / 2
+        fi_modal = df.loc[idx_max, 'fi']
+
+        # Calcular d1 (diferença entre classe modal e anterior)
+        if idx_max == 0:  # Primeira classe
+            # Para a primeira classe, usamos uma aproximação baseada na tendência das frequências
+            if len(df) > 1:
+                # Estimativa baseada na tendência das primeiras classes
+                fi_anterior = 0  # Assumimos frequência zero antes da primeira classe
+            else:
+                fi_anterior = 0
         else:
-            # Obter dados da classe modal e adjacentes
-            fi_modal = df.loc[idx_max, 'fi']
             fi_anterior = df.loc[idx_max - 1, 'fi']
+
+        # Calcular d2 (diferença entre classe modal e posterior)
+        if idx_max == len(df) - 1:  # Última classe
+            fi_posterior = 0
+        else:
             fi_posterior = df.loc[idx_max + 1, 'fi']
 
-            d1 = fi_modal - fi_anterior
-            d2 = fi_modal - fi_posterior
+        # Calcular as diferenças
+        d1 = fi_modal - fi_anterior
+        d2 = fi_modal - fi_posterior
 
-            # Se d1 ou d2 for negativo ou zero, usar a moda bruta
-            if d1 <= 0 or d2 <= 0:
-                st.info(
-                    f"Não é possível calcular a moda de Czuber para a classe '{df.loc[idx_max, 'Classe']}' com as diferenças atuais (d1={d1}, d2={d2}). Usando a moda bruta ({((df.loc[idx_max, 'limite_inferior'] + df.loc[idx_max, 'limite_superior']) / 2):.4f}).")
-                moda_czuber = (df.loc[idx_max, 'limite_inferior'] + df.loc[idx_max, 'limite_superior']) / 2
-            else:
-                # Calcular a moda de Czuber
-                limite_inferior = df.loc[idx_max, 'limite_inferior']
-                amplitude = df.loc[idx_max, 'amplitude']  # Usar amplitude calculada
-                moda_czuber = limite_inferior + (d1 / (d1 + d2)) * amplitude
+        # Aplicar a fórmula de Czuber
+        limite_inferior = df.loc[idx_max, 'limite_inferior']
+        amplitude = df.loc[idx_max, 'amplitude']
+
+        # Ajustes para casos especiais
+        if d1 <= 0 and d2 <= 0:
+            # Se ambas as diferenças são não-positivas, usamos o ponto médio
+            moda_czuber = (df.loc[idx_max, 'limite_inferior'] + df.loc[idx_max, 'limite_superior']) / 2
+        else:
+            # Caso normal
+            moda_czuber = limite_inferior + (d1 / (d1 + d2)) * amplitude
+
+        # Arredondar para duas casas decimais
+        moda_czuber = round(moda_czuber, 2)
 
         modas_czuber.append(moda_czuber)
 
-    # Remover duplicatas se houver (caso raro, mas possível)
+    # Remover duplicatas e ordenar
     modas_czuber = sorted(list(set(modas_czuber)))
 
     return modas_czuber if len(modas_czuber) > 1 else modas_czuber[0]
 
-
-def display_charts(df):
-    """Exibe gráficos para visualização dos dados."""
-    st.subheader("Visualização dos Dados")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        # Histograma
-        fig, ax = plt.subplots(figsize=(10, 6))
-
-        # Criar rótulos para o eixo x
-        labels = [f"{row['limite_inferior']}-{row['limite_superior']}" for _, row in df.iterrows()]
-
-        ax.bar(labels, df['fi'], color='skyblue', edgecolor='navy')
-        ax.set_title('Histograma de Frequências')
-        ax.set_xlabel('Classes')
-        ax.set_ylabel('Frequência (fi)')
-        ax.tick_params(axis='x', rotation=45)
-
-        # Adicionar valores sobre as barras
-        for i, v in enumerate(df['fi']):
-            ax.text(i, v + 0.1, str(int(v) if v.is_integer() else f"{v:.1f}"),
-                    ha='center', va='bottom', fontweight='bold')
-
-        plt.tight_layout()
-        st.pyplot(fig)
-
-    with col2:
-        # Polígono de frequências acumuladas
-        fig, ax = plt.subplots(figsize=(10, 6))
-
-        # Usar limites superiores como pontos no eixo x para a ogiva
-        x_ogiva = [df.loc[0, 'limite_inferior']] + df['limite_superior'].tolist()
-        y_ogiva = [0] + df['faq'].tolist()
-        labels_ogiva = [str(x) for x in x_ogiva]
-
-        ax.plot(labels_ogiva, y_ogiva, marker='o', linestyle='-', color='green', linewidth=2)
-        ax.set_title('Polígono de Frequências Acumuladas (Ogiva)')
-        ax.set_xlabel('Limites Superiores das Classes')
-        ax.set_ylabel('Frequência Acumulada (faq)')
-        ax.tick_params(axis='x', rotation=45)
-
-        # Adicionar valores sobre os pontos
-        for i, v in enumerate(y_ogiva):
-            if i > 0:  # Não mostrar o ponto zero inicial
-                ax.text(i, v + 0.5, str(int(v) if v.is_integer() else f"{v:.1f}"),
-                        ha='center', va='bottom', fontweight='bold')
-
-        plt.tight_layout()
-        st.pyplot(fig)
-
-    # Adicionar gráfico de pizza para frequências relativas
-    st.subheader("Distribuição de Frequências")
-    fig, ax = plt.subplots(figsize=(10, 6))
-
-    # Criar rótulos para o gráfico de pizza
-    pie_labels = [f"{row['limite_inferior']}-{row['limite_superior']}" for _, row in
-                  df.iterrows()]
-
-    ax.pie(df['fi'], labels=pie_labels, autopct='%1.1f%%', startangle=90, shadow=True)
-    ax.axis('equal')
-    ax.set_title('Distribuição Percentual das Classes')
-
-    plt.tight_layout()
-    st.pyplot(fig)
-
-
 if __name__ == "__main__":
     main()
-
